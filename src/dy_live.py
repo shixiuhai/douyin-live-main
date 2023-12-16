@@ -26,12 +26,16 @@ from proto.dy_pb2 import CommonTextMessage
 from proto.dy_pb2 import ProductChangeMessage
 from config import clientDictSession, userDictSession
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
-
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 async def send_message_to_user(data:object, liveRoomId):
-    print("=============================")
+    """_summary_
+    通过客户端对象发送消息给客户端
+    Args:
+        data (object): _description_
+        liveRoomId (_type_): _description_
+    """
     await userDictSession[liveRoomId].send(data)
-    print("=============================")
     
 
 def onMessage(ws: websocket.WebSocketApp, message: bytes):
@@ -50,7 +54,7 @@ def onMessage(ws: websocket.WebSocketApp, message: bytes):
     if payloadPackage.needAck:
         sendAck(ws, logId, payloadPackage.internalExt)
     
-    data = ""
+    data = None
     for msg in payloadPackage.messagesList:
         try:
             # 反对分数消息
@@ -105,20 +109,17 @@ def onMessage(ws: websocket.WebSocketApp, message: bytes):
                 data = WebcastProductChangeMessage(msg.payload)
                 # continue
             logger.info('[onMessage] [待解析方法' + msg.method + '等待解析～] [房间Id：' + liveRoomId + ']')
+            logger.info("------开发发送消息------")
+            if data:
+                asyncio.run(send_message_to_user(json.dumps(data),liveRoomId)) # Run the asynchronous function in the event loop 
+                # loop.close() # Close the loop
+            logger.info("------结束发送消息------")
         except Exception as error:
-            pass
-        finally:
-            # print(data)
-            print("------start------")
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            # Run the asynchronous function in the event loop
-            asyncio.run(send_message_to_user(json.dumps(data),liveRoomId))
-            # coroutine = send_message_to_user(json.dumps(data), liveRoomId)
-            # asyncio.run_coroutine_threadsafe(coroutine, loop)
-            # Close the loop
-            loop.close()
-            print("------end------")
+            # print("错误是%s"%error)
+            logger.error("错误是%s"%error)
+
+           
+
             
         
 
@@ -187,7 +188,9 @@ def unPackWebcastGiftMessage(data):
     try:
         gift_name = data.get("gift").get("name")
         nick_name = data.get("user").get("nickName")
-        print(gift_name, nick_name)
+        logger.info("礼物名称"+gift_name, "昵称"+nick_name)
+        # print(gift_name, nick_name)
+
         # # 对特殊礼物单独统计
         # if gift_name in LIVE_GIFT_LIST:
         #     logger.info(f"抓到特殊礼物了: {gift_name}，用户名：{nick_name}")
@@ -214,11 +217,8 @@ def unPackWebcastMemberMessage(data):
     # 直播间人数统计
     member_num = int(data.get("memberCount", 0))
     log = json.dumps(data, ensure_ascii=False)
-    print("---------------")
-    print(data)
-    print("---------------")
     
-    # logger.info(f'[unPackWebcastMemberMessage]   | ' + log)
+    logger.info(f'[unPackWebcastMemberMessage]   | ' + log)
     return data
 
 

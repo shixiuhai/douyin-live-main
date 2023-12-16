@@ -58,7 +58,7 @@ async def handle_client(userSession, path):
         # await send_message_to_user("哈哈，你好呀", liveRoomId)
         # print(liveRoodId, ttwid)
         async for message in userSession:
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
             
         #     print(f"Received message from client: {message}")
 
