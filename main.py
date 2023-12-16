@@ -1,5 +1,5 @@
 import logging
-from src import dy_live
+from src.dy_live import parseLiveRoomUrl 
 import requests
 import re
 import json
@@ -7,10 +7,9 @@ import asyncio
 import websockets
 from urllib.parse import parse_qs
 from src.utils.logger import logger
-import threading
-
-userDictSession={}
-clientDictThreads = {}
+from config import userDictSession
+import concurrent.futures
+threadPool = concurrent.futures.ThreadPoolExecutor(max_workers=50)
 
 def get_liveRoomId_ttwid(url:str)->tuple:
     """
@@ -37,24 +36,43 @@ def get_liveRoomId_ttwid(url:str)->tuple:
     liveRoomId = res_room.group(1)
     return (liveRoomId, ttwid)
 
-async def handle_client(websocket, path):
+
+async def send_message_to_user(data:object, liveRoomId):
+    print("=============================")
+    await userDictSession[liveRoomId].send(data)
+    print("=============================")
+
+async def handle_client(userSession, path):
     # 解析查询字符串参数
-    params = params = parse_qs(path[2:])
+    params = parse_qs(path[2:])
     print(f"Client connected with parameters: {params}")
 
     try:
-        async for message in websocket:
-            print(f"Received message from client: {message}")
+        liveRoomId, ttwid = get_liveRoomId_ttwid(params["url"][0])
+        userDictSession[liveRoomId] = userSession
+        threadPool.submit(parseLiveRoomUrl, liveRoomId, ttwid)
 
-            # 在这里处理接收到的消息
+        # await userSession.send("成功发射")
+        # await userDictSession[liveRoomId].send("你好好")
+        # asyncio.run(send_message_to_user("你好呀", liveRoomId))
+        # await send_message_to_user("哈哈，你好呀", liveRoomId)
+        # print(liveRoodId, ttwid)
+        async for message in userSession:
+            await asyncio.sleep(1)
+            
+        #     print(f"Received message from client: {message}")
 
-            # 例如，回复客户端
-            response_message = f"Server received: {message}"
-            await websocket.send(response_message)
-            print(f"Sent message to client: {response_message}")
+        #     # 在这里处理接收到的消息
+
+        #     # 例如，回复客户端
+        #     response_message = f"Server received: {message}"
+        #     await websocket.send(response_message)
+        #     print(f"Sent message to client: {response_message}")
 
     finally:
         # 客户端断开连接时执行清理工作
+        
+        userDictSession.pop(liveRoomId)
         print("Client disconnected")
 
 async def start_server(host, port):

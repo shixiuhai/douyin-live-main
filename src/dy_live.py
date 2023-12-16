@@ -24,7 +24,15 @@ from proto.dy_pb2 import RoomUserSeqMessage
 from proto.dy_pb2 import UpdateFanTicketMessage
 from proto.dy_pb2 import CommonTextMessage
 from proto.dy_pb2 import ProductChangeMessage
-clientDictSession={}
+from config import clientDictSession, userDictSession
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+async def send_message_to_user(data:object, liveRoomId):
+    print("=============================")
+    await userDictSession[liveRoomId].send(data)
+    print("=============================")
+    
 
 def onMessage(ws: websocket.WebSocketApp, message: bytes):
     liveRoomId = clientDictSession[ws] # 获取房间ID
@@ -41,57 +49,78 @@ def onMessage(ws: websocket.WebSocketApp, message: bytes):
     # 发送ack包
     if payloadPackage.needAck:
         sendAck(ws, logId, payloadPackage.internalExt)
+    
+    data = ""
     for msg in payloadPackage.messagesList:
-        # 反对分数消息
-        if msg.method == 'WebcastMatchAgainstScoreMessage':
-            unPackMatchAgainstScoreMessage(msg.payload)
-            continue
+        try:
+            # 反对分数消息
+            if msg.method == 'WebcastMatchAgainstScoreMessage':
+                data = unPackMatchAgainstScoreMessage(msg.payload)
+                # continue
 
-        # 点赞数
-        if msg.method == 'WebcastLikeMessage':
-            unPackWebcastLikeMessage(msg.payload)
-            continue
+            # 点赞数
+            if msg.method == 'WebcastLikeMessage':
+                data = unPackWebcastLikeMessage(msg.payload)
+                # continue
 
-        # 成员进入直播间消息
-        if msg.method == 'WebcastMemberMessage':
-            unPackWebcastMemberMessage(msg.payload)
-            continue
+            # 成员进入直播间消息
+            if msg.method == 'WebcastMemberMessage':
+                data = unPackWebcastMemberMessage(msg.payload)
+                # asyncio.run(send_message_to_user(data, liveRoomId))
+                # sync_function(data, liveRoomId)
+                # continue
 
-        # 礼物消息
-        if msg.method == 'WebcastGiftMessage':
-            unPackWebcastGiftMessage(msg.payload)
-            continue
+            # 礼物消息
+            if msg.method == 'WebcastGiftMessage':
+                data = unPackWebcastGiftMessage(msg.payload)
+                # continue
 
-        # 聊天消息
-        if msg.method == 'WebcastChatMessage':
-            unPackWebcastChatMessage(msg.payload)
-            continue
+            # 聊天消息
+            if msg.method == 'WebcastChatMessage':
+                data = unPackWebcastChatMessage(msg.payload)
+                # continue
 
-        # 联谊会消息
-        if msg.method == 'WebcastSocialMessage':
-            unPackWebcastSocialMessage(msg.payload)
-            continue
+            # 联谊会消息
+            if msg.method == 'WebcastSocialMessage':
+                data = unPackWebcastSocialMessage(msg.payload)
+                # continue
 
-        # 房间用户发送消息
-        if msg.method == 'WebcastRoomUserSeqMessage':
-            unPackWebcastRoomUserSeqMessage(msg.payload)
-            continue
+            # 房间用户发送消息
+            if msg.method == 'WebcastRoomUserSeqMessage':
+                data = unPackWebcastRoomUserSeqMessage(msg.payload)
+                # continue
 
-        # 更新粉丝票
-        if msg.method == 'WebcastUpdateFanTicketMessage':
-            unPackWebcastUpdateFanTicketMessage(msg.payload)
-            continue
+            # 更新粉丝票
+            if msg.method == 'WebcastUpdateFanTicketMessage':
+                data = unPackWebcastUpdateFanTicketMessage(msg.payload)
+                # continue
 
-        # 公共文本消息
-        if msg.method == 'WebcastCommonTextMessage':
-            unPackWebcastCommonTextMessage(msg.payload)
-            continue
+            # 公共文本消息
+            if msg.method == 'WebcastCommonTextMessage':
+                data = unPackWebcastCommonTextMessage(msg.payload)
+                # continue
 
-        # 商品改变消息
-        if msg.method == 'WebcastProductChangeMessage':
-            WebcastProductChangeMessage(msg.payload)
-            continue
-        logger.info('[onMessage] [待解析方法' + msg.method + '等待解析～] [房间Id：' + liveRoomId + ']')
+            # 商品改变消息
+            if msg.method == 'WebcastProductChangeMessage':
+                data = WebcastProductChangeMessage(msg.payload)
+                # continue
+            logger.info('[onMessage] [待解析方法' + msg.method + '等待解析～] [房间Id：' + liveRoomId + ']')
+        except Exception as error:
+            pass
+        finally:
+            # print(data)
+            print("------start------")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            # Run the asynchronous function in the event loop
+            asyncio.run(send_message_to_user(json.dumps(data),liveRoomId))
+            # coroutine = send_message_to_user(json.dumps(data), liveRoomId)
+            # asyncio.run_coroutine_threadsafe(coroutine, loop)
+            # Close the loop
+            loop.close()
+            print("------end------")
+            
+        
 
 
 def unPackWebcastCommonTextMessage(data):
@@ -231,11 +260,6 @@ def onError(ws, error):
 
 def onClose(ws, a, b):
     logger.info('[onClose] [webSocket Close事件]')
-    # clientDictSession.pop(ws)
-    # # 直播结束退出程序
-    # pid = os.getpid()  # 获取当前进程的PID
-    # os.kill(pid, signal.SIGTERM)
-
 
 def onOpen(ws):
     _thread.start_new_thread(ping, (ws,))
@@ -247,12 +271,14 @@ def onOpen(ws):
 def ping(ws):
     liveRoomId = clientDictSession[ws] # 获取房间ID
     while True:
+        if liveRoomId not in userDictSession:
+            ws.close()
         obj = PushFrame()
         obj.payloadType = 'hb'
         data = obj.SerializeToString()
         ws.send(data, websocket.ABNF.OPCODE_BINARY)
         logger.info('[ping] [💗发送ping心跳] [房间Id：' + liveRoomId + '] ====>')
-        time.sleep(10)
+        time.sleep(5)
 
 
 def wssServerStart(ttwid:str, liveRoomId:str):
@@ -273,30 +299,12 @@ def wssServerStart(ttwid:str, liveRoomId:str):
     ws.run_forever()
 
 
-def parseLiveRoomUrl(url, userSession):
+def parseLiveRoomUrl(liveRoomId, ttwid):
     """
     解析直播的弹幕websocket地址
     :param url:直播地址
     :return:
     """
-    h = {
-        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36',
-        'cookie': '__ac_nonce=0638733a400869171be51',
-    }
-    res = requests.get(url=url, headers=h)
-    data = res.cookies.get_dict()
-    ttwid = data['ttwid']
-    res = res.text
-    res_room = re.search(r'roomId\\":\\"(\d+)\\"', res)
-    # 获取直播主播的uid和昵称等信息
-    live_room_search = re.search(r'owner\\":(.*?),\\"room_auth', res)
-    # 如果没有获取到live_room信息，很有可能是直播已经关闭了，待优化
-    live_room_res = live_room_search.group(1).replace('\\"', '"')
-    live_room_info = json.loads(live_room_res)
-    logger.info(f"主播账号信息: {live_room_info}")
-    print(f"主播账号信息: {live_room_info}")
-    # 直播间id
-    liveRoomId = res_room.group(1)
+    
     wssServerStart(ttwid, liveRoomId)
 
