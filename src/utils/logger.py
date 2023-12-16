@@ -2,13 +2,9 @@ import logging
 import os
 
 from config import LOG_FILE_SAVE, LOG_FILE_NAME, LOG_LEVEL, LOG_FORMAT
-
+logging.basicConfig(level=logging.DEBUG)
 # 第一步：创建文件日志对象
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
-
-
-
 # 配置日志文件保存
 if LOG_FILE_SAVE:
     file_path = os.path.join(os.getcwd(), LOG_FILE_NAME)
